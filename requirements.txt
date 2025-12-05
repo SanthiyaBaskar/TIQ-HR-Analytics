@@ -7,3 +7,6 @@ nltk
 vaderSentiment
 wordcloud
 pdfplumber
+plotly
+python-docx
+PyPDF2
