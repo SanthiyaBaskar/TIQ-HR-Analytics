@@ -103,7 +103,8 @@ page = st.sidebar.radio("Choose view", [
     "Resume → Job Match",
     "Sentimental analysis",
     "Visualizations",
-    "Download Data"
+    "Download Data",
+    "HR Assistant"
 ])
 
 # Developer / data status (skip jobs.csv presence messaging)
@@ -500,3 +501,151 @@ if st.session_state.get("saved_note"):
     saved = st.session_state["saved_note"]
     st.markdown(f"**Saved note (UTC):** {saved['ts']}")
     st.write(saved["text"])
+
+# HR ASSISTANT (Local Intelligence)
+elif page == "HR Assistant":
+    st.header("🤖 HR Assistant — Ask Anything About Your HR Data")
+
+    st.write(
+        "This assistant analyzes your HR datasets and provides data-aware insights "
+        "for attrition, sentiment, job matching, and employee statistics."
+    )
+
+    user_q = st.text_input(
+        "Ask your question about employees, attrition, sentiment, jobs…"
+    )
+
+    if st.button("Ask"):
+        if not user_q.strip():
+            st.warning("Please type a question.")
+        else:
+            q = user_q.lower()
+            reply = ""
+
+            # ------------------------------
+            # 1️⃣ ATTRITION QUESTIONS
+            # ------------------------------
+            if ("attrition" in q) or ("high risk" in q):
+                if (
+                    df_attr_raw is not None
+                    and "attrition_probability" in df_attr_raw.columns
+                ):
+                    top = (
+                        df_attr_raw.sort_values(
+                            "attrition_probability", ascending=False
+                        )
+                        .head(5)
+                    )
+                    reply = "Top high-risk employees:\n"
+                    for _, r in top.iterrows():
+                        reply += (
+                            f"- {r.get('name','N/A')} "
+                            f"({r.get('department','N/A')}), risk: "
+                            f"{r.get('attrition_probability',0):.2f}\n"
+                        )
+                else:
+                    reply = "Attrition dataset not available."
+
+            # ------------------------------
+            # 2️⃣ SENTIMENT QUESTIONS
+            # ------------------------------
+            elif (
+                "sentiment" in q
+                or "reviews" in q
+                or "mood" in q
+                or "feedback" in q
+            ):
+                if (
+                    df_sent_raw is not None
+                    and "sentiment_label" in df_sent_raw.columns
+                ):
+                    counts = df_sent_raw["sentiment_label"].value_counts()
+                    reply = (
+                        "Sentiment summary:\n"
+                        f"- Positive: {counts.get('positive', 0)}\n"
+                        f"- Neutral: {counts.get('neutral', 0)}\n"
+                        f"- Negative: {counts.get('negative', 0)}\n"
+                    )
+                else:
+                    reply = "Sentiment data unavailable."
+
+            # ------------------------------
+            # 3️⃣ JOB MATCHING QUESTIONS
+            # ------------------------------
+            elif ("job" in q) or ("match" in q):
+                last = st.session_state.get("last_match_df")
+                if last is not None and not last.empty:
+                    dfm = last.head(3)
+                    reply = "Top job matches:\n"
+                    for _, r in dfm.iterrows():
+                        reply += (
+                            f"- {r.get('job_title','N/A')} "
+                            f"(score: {r.get('score',0):.2f})\n"
+                        )
+                else:
+                    reply = (
+                        "No job matching performed yet. "
+                        "Parse a resume and run job matching first."
+                    )
+
+            # ------------------------------
+            # 4️⃣ RESUME PARSING QUESTIONS
+            # ------------------------------
+            elif ("resume" in q) or ("skills" in q):
+                txt = st.session_state.get("last_resume_text", "").strip()
+                if txt:
+                    parsed = parse_resume_text_basic(txt, jobs_skills=[])
+                    reply = (
+                        "Resume insights:\n"
+                        f"- Name: {parsed.get('name','–')}\n"
+                        f"- Emails: {', '.join(parsed.get('emails', [])) or '–'}\n"
+                        f"- Skills: {', '.join(parsed.get('skills', [])) or '–'}\n"
+                    )
+                else:
+                    reply = "No resume uploaded or parsed yet."
+
+            # ------------------------------
+            # 5️⃣ EMPLOYEE STATISTICS
+            # ------------------------------
+            elif (
+                "employee" in q
+                or "salary" in q
+                or "department" in q
+                or "count" in q
+            ):
+                reply = (
+                    f"Our dataset contains {len(df_employees)} employees.\n"
+                )
+
+                if "salary" in q:
+                    reply += (
+                        f"Average salary: "
+                        f"{df_employees['salary'].mean():.0f}\n"
+                    )
+
+                if "department" in q:
+                    reply += "Top departments:\n"
+                    for d, c in (
+                        df_employees["department"]
+                        .value_counts()
+                        .head(3)
+                        .items()
+                    ):
+                        reply += f"- {d}: {c}\n"
+
+            # ------------------------------
+            # 6️⃣ DEFAULT RESPONSE
+            # ------------------------------
+            else:
+                reply = (
+                    "I can help with:\n"
+                    "- Attrition insights\n"
+                    "- Sentiment analysis\n"
+                    "- Resume parsing\n"
+                    "- Job matching\n"
+                    "- Employee statistics\n"
+                    "Try asking: *Who is at highest attrition risk?*"
+                )
+
+            st.success(reply)
+
